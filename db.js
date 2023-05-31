@@ -12,7 +12,8 @@ const client = new MongoClient(URL, {
 
 async function start() {
   await client.connect();
-  module.exports = client.db();
+  // module.exports = client.db();
+  module.exports = client;
   const app = require("./app");
   app.listen(PORT);
   console.log(`Listening on port ${PORT}`);
