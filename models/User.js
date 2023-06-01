@@ -1,11 +1,8 @@
 const bcrypt = require("bcryptjs");
 const DB = require("../db").db();
 const usersCollection = DB.collection("users");
-
-// console.log(usersCollection.find({}));
-// console.log(`User Collections are: ${usersCollection}`);
-
 const validator = require("validator");
+const md5 = require("md5");
 
 let User = function (data) {
   this.data = data;
@@ -33,32 +30,24 @@ User.prototype.cleanUp = function () {
 
 User.prototype.validate = function () {
   return new Promise(async (resolve, reject) => {
+    // Username Validation
     if (this.data.username == "") {
       this.errors.push("Username cannot be empty");
     }
+
     if (this.data.username != "" && this.data.username.length < 3) {
       this.errors.push("Username should be more than 3 characters ");
     }
+
     if (this.data.username.length > 30) {
       this.errors.push("Username cannot exceed 30 characters ");
     }
+
     if (
       this.data.username != "" &&
       !validator.isAlphanumeric(this.data.username)
     ) {
       this.errors.push("Username can only contain numbers and letters");
-    }
-    if (!validator.isEmail(this.data.email)) {
-      this.errors.push("You must provide a valid email");
-    }
-    if (this.data.password == "") {
-      this.errors.push("You must provide a password");
-    }
-    if (this.data.password.length > 0 && this.data.password.length < 10) {
-      this.errors.push("Password must be atleast 10 characters");
-    }
-    if (this.data.password.length > 50) {
-      this.errors.push("Password cannot exceed 50 characters");
     }
 
     // check if username is already taken
@@ -75,6 +64,11 @@ User.prototype.validate = function () {
       }
     }
 
+    // Email Validation
+    if (!validator.isEmail(this.data.email)) {
+      this.errors.push("You must provide a valid email");
+    }
+
     // check if email is already taken
     if (validator.isEmail(this.data.email)) {
       let emailExists = await usersCollection.findOne({
@@ -84,6 +78,20 @@ User.prototype.validate = function () {
         this.errors.push("That email is already being used");
       }
     }
+
+    // Password Validation
+    if (this.data.password == "") {
+      this.errors.push("You must provide a password");
+    }
+
+    if (this.data.password.length > 0 && this.data.password.length < 10) {
+      this.errors.push("Password must be atleast 10 characters");
+    }
+
+    if (this.data.password.length > 50) {
+      this.errors.push("Password cannot exceed 50 characters");
+    }
+
     resolve();
   });
 };
@@ -98,6 +106,8 @@ User.prototype.login = function () {
       attemptedUser &&
       bcrypt.compareSync(this.data.password, attemptedUser.password)
     ) {
+      this.data = attemptedUser;
+      this.getAvatar();
       resolve("Congrats, logged in");
     } else {
       reject("Invalid Username or Password");
@@ -114,14 +124,20 @@ User.prototype.register = function () {
     // Step2: Only If there are no validation erros
     // Then save the user data into db
     if (!this.errors.length) {
-      // Hasing user password
+      // Hashing user password
       let salt = bcrypt.genSaltSync(10);
       this.data.password = bcrypt.hashSync(this.data.password, salt);
       await usersCollection.insertOne(this.data);
+      this.getAvatar();
+      resolve();
     } else {
       reject(this.errors);
     }
   });
+};
+
+User.prototype.getAvatar = function () {
+  this.avatar = `https://s.gravatar.com/avatar/${md5(this.data.email)}?s=128`;
 };
 
 module.exports = User;
