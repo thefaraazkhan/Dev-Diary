@@ -6,29 +6,50 @@ exports.login = function (req, res) {
     .login()
     .then(function (result) {
       req.session.user = { username: user.data.username };
-      res.send("Congrats, sucessfully logged in");
+      req.session.save(function () {
+        res.redirect("/");
+      });
     })
     .catch(function (e) {
-      res.send(e);
+      req.flash("errors", e);
+      req.session.save(function () {
+        res.redirect("/");
+      });
     });
 };
 
-exports.logout = function () {};
+exports.logout = function (req, res) {
+  req.session.destroy(function () {
+    res.redirect("/");
+  });
+};
 
 exports.register = function (req, res) {
   let user = new User(req.body);
-  user.register();
-  if (user.errors.length) {
-    res.send(user.errors);
-  } else {
-    res.send(user);
-  }
+  user
+    .register()
+    .then(() => {
+      req.session.user = { username: user.data.username };
+    })
+    .catch((regErrors) => {
+      regErrors.forEach(function (error) {
+        req.flash("regErrors", error);
+      });
+      req.session.save(function () {
+        res.redirect("/");
+      });
+    });
 };
 
 exports.home = function (req, res) {
   if (req.session.user) {
-    res.send("Welcome to the app");
+    // const user = req.users.user;
+    console.log(req.session.user);
+    res.render("home-dashboard", { username: req.session.user.username });
   } else {
-    res.render("home");
+    res.render("home", {
+      errors: req.flash("errors"),
+      regErrors: req.flash("regErrors"),
+    });
   }
 };
