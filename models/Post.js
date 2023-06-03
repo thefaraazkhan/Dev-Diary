@@ -3,10 +3,11 @@ const postCollection = DB.collection("posts");
 const ObjectId = require("mongodb").ObjectId;
 const User = require("./User");
 
-let Post = function (data, userid) {
+let Post = function (data, userid, requestedPostId) {
   this.data = data;
   this.errors = [];
   this.userid = userid;
+  this.requestedPostId = requestedPostId;
 };
 
 Post.prototype.cleanUp = function () {
@@ -43,8 +44,8 @@ Post.prototype.create = function () {
       // Save post in database
       postCollection
         .insertOne(this.data)
-        .then(() => {
-          resolve();
+        .then((info) => {
+          resolve(info.insertedId);
         })
         .catch(() => {
           this.errors.push("Please try again later");
@@ -52,6 +53,38 @@ Post.prototype.create = function () {
         });
     } else {
       reject(this.errors);
+    }
+  });
+};
+
+Post.prototype.update = function () {
+  return new Promise(async (resolve, reject) => {
+    try {
+      let post = await Post.findSingleById(this.requestedPostId, this.userid);
+      if (post.isVisitorOwner) {
+        let status = await this.actuallyUpdate();
+        resolve(status);
+      } else {
+        reject();
+      }
+    } catch {
+      reject();
+    }
+  });
+};
+
+Post.prototype.actuallyUpdate = function () {
+  return new Promise(async (resolve, reject) => {
+    this.cleanUp();
+    this.validate();
+    if (!this.errors.length) {
+      await postCollection.findOneAndUpdate(
+        { _id: new ObjectId(this.requestedPostId) },
+        { $set: { title: this.data.title, body: this.data.body } }
+      );
+      resolve("success");
+    } else {
+      resolve("failure");
     }
   });
 };
@@ -101,7 +134,6 @@ Post.findSingleById = function (id, visitorId) {
       [{ $match: { _id: new ObjectId(id) } }],
       visitorId
     );
-
     if (posts.length) {
       console.log(posts[0]);
       resolve(posts[0]);
@@ -111,11 +143,11 @@ Post.findSingleById = function (id, visitorId) {
   });
 };
 
-Post.findByAuthorId = function (authorId) {
-  return Post.reusablePostQuery([
-    { $match: { author: authorId } },
-    { $sort: { createdDate: -1 } },
-  ]);
+Post.findByAuthorId = function (authorId, visitorId) {
+  return Post.reusablePostQuery(
+    [{ $match: { author: authorId } }, { $sort: { createdDate: -1 } }],
+    visitorId
+  );
 };
 
 module.exports = Post;
