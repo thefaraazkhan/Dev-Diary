@@ -71,7 +71,6 @@ exports.home = function (req, res) {
     res.render("home-dashboard");
   } else {
     res.render("home", {
-      errors: req.flash("errors"),
       regErrors: req.flash("regErrors"),
     });
   }
@@ -90,7 +89,7 @@ exports.ifUserExists = function (req, res, next) {
 
 exports.profilePostsScreen = function (req, res) {
   // request the post model for posts by a certain author id
-  Post.findByAuthorId(req.profileUser._id)
+  Post.findByAuthorId(req.profileUser._id, req.visitorId)
     .then(function (posts) {
       res.render("profile", {
         posts: posts,
