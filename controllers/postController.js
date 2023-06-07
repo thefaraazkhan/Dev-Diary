@@ -18,10 +18,32 @@ exports.create = function (req, res) {
     });
 };
 
+exports.apiCreate = function (req, res) {
+  let post = new Post(req.body, req.apiUser._id);
+  post
+    .create()
+    .then(function (newId) {
+      res.json("Congrats");
+    })
+    .catch(function (errors) {
+      res.json(errors);
+    });
+};
+
+exports.apiDelete = function (req, res) {
+  Post.delete(req.params.id, req.apiUser._id)
+    .then(() => {
+      res.json("Deleted");
+    })
+    .catch(() => {
+      res.json("you do not have persmission to perform that action");
+    });
+};
+
 exports.viewSingle = async function (req, res) {
   try {
     let post = await Post.findSingleById(req.params.id, req.visitorId);
-    res.render("single-post-screen", { post: post });
+    res.render("single-post-screen", { post: post, title: post.title });
   } catch {
     res.render("404");
   }
@@ -85,5 +107,15 @@ exports.delete = function (req, res) {
       req.session.save(() => {
         res.redirect("/");
       });
+    });
+};
+
+exports.search = function (req, res) {
+  Post.search(req.body.searchTerm)
+    .then((posts) => {
+      res.json(posts);
+    })
+    .catch(() => {
+      res.json([]);
     });
 };

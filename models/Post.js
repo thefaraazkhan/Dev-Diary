@@ -1,5 +1,6 @@
 const DB = require("../db").db();
 const postCollection = DB.collection("posts");
+const followsCollection = DB.collection("follows");
 const ObjectId = require("mongodb").ObjectId;
 const User = require("./User");
 const sanitizeHTML = require("sanitize-html");
@@ -96,31 +97,40 @@ Post.prototype.actuallyUpdate = function () {
   });
 };
 
-Post.reusablePostQuery = function (uniqueOperations, visitorId) {
+Post.reusablePostQuery = function (
+  uniqueOperations,
+  visitorId,
+  finalOperations = []
+) {
   return new Promise(async function (resolve, reject) {
-    let aggOperations = uniqueOperations.concat([
-      {
-        $lookup: {
-          from: "users",
-          localField: "author",
-          foreignField: "_id",
-          as: "authorDocument",
+    let aggOperations = uniqueOperations
+      .concat([
+        {
+          $lookup: {
+            from: "users",
+            localField: "author",
+            foreignField: "_id",
+            as: "authorDocument",
+          },
         },
-      },
-      {
-        $project: {
-          title: 1,
-          body: 1,
-          createdDate: 1,
-          authorId: "$author",
-          author: { $arrayElemAt: ["$authorDocument", 0] },
+        {
+          $project: {
+            title: 1,
+            body: 1,
+            createdDate: 1,
+            authorId: "$author",
+            author: { $arrayElemAt: ["$authorDocument", 0] },
+          },
         },
-      },
-    ]);
+      ])
+      .concat(finalOperations);
+
     let posts = await postCollection.aggregate(aggOperations).toArray();
     // Clean up author property in each post
     posts = posts.map(function (post) {
       post.isVisitorOwner = post.authorId.equals(visitorId);
+      post.authorId = undefined;
+
       post.author = {
         username: post.author.username,
         avatar: new User(post.author, true).avatar,
@@ -142,7 +152,7 @@ Post.findSingleById = function (id, visitorId) {
       visitorId
     );
     if (posts.length) {
-      console.log(posts[0]);
+      // console.log(posts[0]);
       resolve(posts[0]);
     } else {
       reject();
@@ -171,6 +181,44 @@ Post.delete = function (postIdToDelete, currentUserId) {
       reject();
     }
   });
+};
+
+Post.search = function (searchTerm) {
+  return new Promise(async (resolve, reject) => {
+    if (typeof searchTerm == "string") {
+      let posts = await Post.reusablePostQuery(
+        [{ $match: { $text: { $search: searchTerm } } }],
+        undefined,
+        [{ $sort: { score: { $meta: "textScore" } } }]
+      );
+      resolve(posts);
+    } else {
+      reject();
+    }
+  });
+};
+
+Post.countPostsByAuthor = function (id) {
+  return new Promise(async (resolve, reject) => {
+    let postCount = await postCollection.countDocuments({ author: id });
+    resolve(postCount);
+  });
+};
+
+Post.getFeed = async function (id) {
+  // create an [array] of the user ids that the curr user follows
+  let followedUsers = await followsCollection
+    .find({ authorId: new ObjectId(id) })
+    .toArray();
+  followedUsers = followedUsers.map(function (followDoc) {
+    return followDoc.followedId;
+  });
+
+  // look for posts where the author is in the above [array] of followed users
+  return Post.reusablePostQuery([
+    { $match: { author: { $in: followedUsers } } },
+    { $sort: { createdDate: -1 } },
+  ]);
 };
 
 module.exports = Post;
